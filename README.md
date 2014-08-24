@@ -1,7 +1,7 @@
 #DevLink2014-GA-Demo
-===================
-
-Google Analytics API Demo for my 2014 DevLink session: http://www.devlink.net/
+August 29, 2014
+Google Analytics API Demo for my 2014 DevLink session:
+http://www.devlink.net/
 
 
 ## Important: Please Read
