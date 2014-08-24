@@ -1,20 +1,20 @@
 #DevLink2014-GA-Demo
-August 29, 2014
-Google Analytics API Demo for my 2014 DevLink session:
+August 29, 2014   
+Google Analytics API Demo for my 2014 DevLink session:   
 http://www.devlink.net/
 
 
 ## Important: Please Read
-This code base will NOT WORK until you plug in your own Google Analytics IDs into:
+This code base will NOT WORK until you plug in your own Google Analytics IDs into:   
 Lines 13-18: /ga.ashx
 
-Instructions for GA setup can be found in the openting slides of my presentation:
+Instructions for GA setup can be found in the openting slides of my presentation:   
 [Link To Presentation coming August 29, 2014]
 
 ### Be sure to set up Goals in your GA profile
-I have created a page to help generate conversion data once your goals are set up and you have added your google analytics ID:
-Line 63: /page-with-goals.html
-Line 23: /page-with-goals2.html
+I have created a page to help generate conversion data once your goals are set up and you have added your Google Analytics ID:   
+Line 63: /page-with-goals.html   
+Line 23: /page-with-goals2.html   
 
 
 ### Goal Setup
