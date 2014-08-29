@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>DevLink 2014 Demo</title>
+    <link href="//cdn.kendostatic.com/2014.2.716/styles/kendo.common.min.css" rel="stylesheet" />
+    <link href="//cdn.kendostatic.com/2014.2.716/styles/kendo.default.min.css" rel="stylesheet" />
+    <script src="//cdn.kendostatic.com/2014.2.716/js/jquery.min.js"></script>
+    <script src="//cdn.kendostatic.com/2014.2.716/js/angular.min.js"></script>
+    <script src="//cdn.kendostatic.com/2014.2.716/js/kendo.all.min.js"></script>
+    <script src="//cdnjs.cloudflare.com/ajax/libs/underscore.js/1.6.0/underscore-min.js"></script>
+    <script src="//cdnjs.cloudflare.com/ajax/libs/underscore.string/2.3.3/underscore.string.min.js"></script>
+    <script src="/js/util.js"></script>
+</head>
+<body>
+
+    <div id="pnlPerformance" ng-app="DevLinkDemo" ng-controller="DemoCtrl">
+        <div id="pnlDateSearch">
+            <label>From:</label>
+            <input kendo-date-picker k-options="oDtOptions" ng-model="sFrom" k-ng-model="dtFrom" />
+            <br />
+            <label>To:</label>
+            <input kendo-date-picker k-options="oDtOptions" ng-model="sTo" k-ng-model="dtTo" />
+        </div>
+        <div id="pnlOverview"></div>
+        <div id="pnlDetails"></div>
+        <pre>
+(data starts on 08/16/2014)
+********** Data Output ********** 
+sFrom: {{ sFrom }}
+dtFrom: {{ dtFrom }}    
+sTo: {{ sTo }}
+dtTo: {{ dtTo }}
+</pre>
+
+    </div>
+
+    <script>
+        angular.module("DevLinkDemo", ["kendo.directives"]);
+        var DemoCtrl = function ($scope) {
+            // function to return custom GA URL
+            var fnCreateGaUrl = function (sMetrics, sDimenstions, sSort, sFilter) {
+                // prevent passing 'undefined' for optional params
+                sDimenstions = sDimenstions || '';
+                sSort = sSort || '';
+                sFilter = sFilter || '';
+                return '/ga.ashx?metrics={0}&dimensions={1}&sort={2}&filter={3}&from={4}&to={5}'.format(sMetrics, sDimenstions, sSort, sFilter, $scope.dtFrom.format('mmddyyyy'), $scope.dtTo.format('mmddyyyy'));
+            };
+
+            // util method for processing our data
+            var fnProcessData = function(oRawData) {
+                var arrData = [],
+                    arrHeaders = [];
+
+                // process the header
+                for (var i = 0; i < oRawData.columnHeaders.length; i++) {
+                    // add the name propery without the ga: clutter
+                    var oHead = { 'name': oRawData.columnHeaders[i].name.replace('ga:', '') };
+
+                    // create a custom parse function based on the dataType
+                    switch (oRawData.columnHeaders[i].dataType) {
+                        case 'INTEGER':
+                            oHead.parse = function(sVal) { return parseInt(sVal); };
+                            break;
+
+                        case 'FLOAT':
+                        case 'TIME':
+                            oHead.parse = function (sVal) { return parseFloat(sVal); };
+                            break;
+
+                        default:
+                            oHead.parse = function (sVal) { return sVal; };
+                            break;
+                    }
+
+                    arrHeaders.push(oHead);
+                }
+
+                // loop through all rows, declaring readability handles to rows & col data
+                for (i = 0; i < oRawData.rows.length; i++) {
+                    var oData = {},
+                        oRow = oRawData.rows[i];
+
+                    // parse the data with the columns parse method
+                    for (var j = 0; j < arrHeaders.length; j++) {
+                        var oCol = arrHeaders[j];
+                        oData[oCol.name] = oCol.parse(oRow[j]);
+                    }
+                    
+                    arrData.push(oData);
+                }
+
+                return arrData;
+            }
+
+
+            // declare shared options for the date pickers
+            $scope.oDtOptions = {
+                change: function (e) {
+                    // if we have a from and to date, run the querys
+                    if ($scope.dtFrom && $scope.dtTo) {
+                        // query for the site-wide stats (visits, avg time on site, page views per visit)
+                        var sUrl = fnCreateGaUrl('ga:visits,ga:avgTimeOnSite,ga:pageviewsPerVisit');
+
+                        // make a request and console.log the results
+                        $.get(sUrl, function(oJson) {
+                            console.info(oJson);
+                            console.info(fnProcessData(oJson));
+                        });
+                    }
+                }
+            }
+        }
+    </script>
+    <style scoped>
+        /* Basic Styling to make this easy on the eyes */
+        body {
+            font-family: Arial, Helvetica, sans-serif;
+        }
+
+        #pnlPerformance {
+            margin: 20px;
+            padding: 20px;
+            border: 2px solid #333;
+            border-radius: 10px;
+        }
+
+        #pnlDateSearch {
+            float: left;
+            margin: 0 30px 0 0;
+        }
+
+            #pnlDateSearch label {
+                display: inline-block;
+                width: 50px;
+                text-align: right;
+            }
+
+        #pnlDetails {
+            clear: both;
+        }
+    </style>
+</body>

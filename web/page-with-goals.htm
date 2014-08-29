@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>DevLink 2014 Demo</title>
+    <link href="//cdn.kendostatic.com/2014.2.716/styles/kendo.common.min.css" rel="stylesheet" />
+    <link href="//cdn.kendostatic.com/2014.2.716/styles/kendo.default.min.css" rel="stylesheet" />
+    <link href="//cdn.kendostatic.com/2014.2.716/styles/kendo.dataviz.min.css" rel="stylesheet" />
+    <link href="//cdn.kendostatic.com/2014.2.716/styles/kendo.dataviz.default.min.css" rel="stylesheet" />
+    <script src="//cdn.kendostatic.com/2014.2.716/js/jquery.min.js"></script>
+    <script src="//cdn.kendostatic.com/2014.2.716/js/angular.min.js"></script>
+    <script src="//cdn.kendostatic.com/2014.2.716/js/kendo.all.min.js"></script>
+    <script src="//cdnjs.cloudflare.com/ajax/libs/underscore.js/1.6.0/underscore-min.js"></script>
+    <script src="//cdnjs.cloudflare.com/ajax/libs/underscore.string/2.3.3/underscore.string.min.js"></script>
+</head>
+<body>
+    <h1>Sample Goals Page</h1>
+    <h2>Goal 1:</h2>
+    <h3>Click the button below</h3>
+    <span id="button" class="k-button"><span class="k-icon k-i-tick"></span> Click Me</span> <em>(you know you want to)</em>
+
+    <h2>Goal 2:</h2>
+    <h3>Slide the slider to the right</h3>
+    <input id="slider" value="0" />
+
+    <h2>Goal 3:</h2>
+    <h3>Type something profound in the box below</h3>
+    <textarea id="textarea"></textarea>
+
+    <h2>Goal 4:</h2>
+    <h3>Pick your favorite color</h3>
+    <div id="palette"></div>
+
+    <h2>Goal 5:</h2>
+    <h3>Pick a date</h3>
+    <input id="datepicker" />
+
+    <h2>Goal 6:</h2>
+    <h3>Choose your rank</h3>
+    <select id="dropdown">
+        <option>...</option>
+        <option>Page</option>
+        <option>Squire</option>
+        <option>Knight</option>
+        <option>Knight Commander</option>
+        <option>Knight Officer</option>
+        <option>Knight Grand Cross</option>
+    </select>
+
+    <h2>Goal 7:</h2>
+    <h3>Click on this link</h3>
+    <a href="/page-with-goals2.htm">A Great Link</a>
+
+    <h2>Goal 8:</h2>
+    <h3>How much would you like to donate?</h3>
+    <input id="donation" type="number" value="30" min="0" max="100" />
+
+    <h2>Goal 9:</h2>
+    <h3>Open a window using the button below</h3>
+    <span id="openWindow" class="k-button">Open Window</span>
+
+    <script>
+        (function (i, s, o, g, r, a, m) { i['GoogleAnalyticsObject'] = r; i[r] = i[r] || function () {(i[r].q = i[r].q || []).push(arguments)}, i[r].l = 1 * new Date(); a = s.createElement(o),m = s.getElementsByTagName(o)[0]; a.async = 1; a.src = g; m.parentNode.insertBefore(a, m)})(window, document, 'script', '//www.google-analytics.com/analytics.js', 'ga');
+        ga('create', 'UA-CHANGE-ME', 'auto');
+        ga('send', 'pageview');
+    </script>
+    <script>
+        $(document).ready(function () {
+            var fnTrackGoal = function(sAction, sLabel) {
+                ga('send', 'event', 'DevLink2014 Goals', sAction, sLabel);
+            }
+
+            $("#button").on('click', function (e) {
+                fnTrackGoal('Button Click');
+            });
+
+            // goal 2
+            $("#slider").kendoSlider({
+                increaseButtonTitle: "More",
+                decreaseButtonTitle: "Less",
+                min: 0,
+                max: 10,
+                largeStep: 2,
+                smallStep: 1,
+                change: function (e) {
+                    fnTrackGoal('Slider Change', this.value());
+                }
+            });
+
+            // goal 3
+            $("#textarea").kendoEditor({
+                change: function (e) {
+                    fnTrackGoal('Type Something', this.value());
+                }
+            });
+
+            // goal 4
+            $("#palette").kendoColorPalette({
+                columns: 4,
+                tileSize: { width: 34, height: 19 },
+                palette: ["#f0d0c9", "#e2a293", "#d4735e", "#65281a", "#eddfda", "#dcc0b6", "#cba092", "#7b4b3a", "#fcecd5", "#f9d9ab", "#f6c781", "#c87d0e", "#e1dca5", "#d0c974", "#a29a36", "#514d1b", "#c6d9f0", "#8db3e2", "#548dd4", "#17365d"],
+                change: function (e) {
+                    fnTrackGoal('Pick Color', this.value());
+                }
+            });
+
+            // goal 5
+            $("#datepicker").kendoDatePicker({
+                change: function (e) {
+                    fnTrackGoal('Pick Date', this.value().toString());
+                }
+            });
+
+            // goal 6
+            $("#dropdown").kendoDropDownList({
+                change: function (e) {
+                    fnTrackGoal('Choose Your Rank', this.value());
+                }
+            });
+
+            // goal 7 (no JS)
+
+            // goal 8
+            $("#donation").kendoNumericTextBox({
+                format: "c",
+                decimals: 3,
+                change: function (e) {
+                    fnTrackGoal('Donation', this.value().toString());
+                }
+            });
+
+            // goal 9
+            var wnd = $("<div></div>").kendoWindow({
+                width: "600px",
+                height: $(window).height() - 100,
+                title: "An impressive popup",
+                content: "http://www.telerik.com/",
+                iframe: true,
+                actions: [
+                    "Pin",
+                    "Minimize",
+                    "Maximize",
+                    "Close"
+                ],
+                close: function () {
+                    fnTrackGoal('Window Close', wnd.title());
+                }
+            }).data('kendoWindow');
+            $("#openWindow").on('click', function (e) {
+                wnd.center().open();
+                fnTrackGoal('Window Open', wnd.title());
+            });
+        });
+    </script>
+    <style scoped>
+        body {
+            font-family: Arial, Helvetica, sans-serif;
+        }
+        h1, h2, h3 {
+            margin: 20px 0 3px 0;
+            line-height: .9em;
+            font-size: 1em;
+        }
+        h1 {
+            font-size: 1.5em;
+        }
+        h3 {
+            margin-top: 0;
+            color: #666666;
+        }
+
+        #palette {
+            vertical-align: top;
+            display: inline-block;
+        }
+    </style>
+
+
+
+</body>

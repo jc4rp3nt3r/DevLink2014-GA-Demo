@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>DevLink 2014 Demo</title>
+    <link href="//cdn.kendostatic.com/2014.2.716/styles/kendo.common.min.css" rel="stylesheet" />
+    <link href="//cdn.kendostatic.com/2014.2.716/styles/kendo.default.min.css" rel="stylesheet" />
+    <script src="//cdn.kendostatic.com/2014.2.716/js/jquery.min.js"></script>
+    <script src="//cdn.kendostatic.com/2014.2.716/js/angular.min.js"></script>
+    <script src="//cdn.kendostatic.com/2014.2.716/js/kendo.all.min.js"></script>
+    <script src="//cdnjs.cloudflare.com/ajax/libs/underscore.js/1.6.0/underscore-min.js"></script>
+    <script src="//cdnjs.cloudflare.com/ajax/libs/underscore.string/2.3.3/underscore.string.min.js"></script>
+    <script src="/js/util.js"></script>
+</head>
+<body>
+
+    <div id="pnlPerformance" ng-app="DevLinkDemo" ng-controller="DemoCtrl">
+        <div id="pnlDateSearch">
+            <label>From:</label>
+            <input kendo-date-picker k-options="oDtOptions" ng-model="sFrom" k-ng-model="dtFrom" />
+            <br />
+            <label>To:</label>
+            <input kendo-date-picker k-options="oDtOptions" ng-model="sTo" k-ng-model="dtTo" />
+        </div>
+        <div id="pnlInstructions" ng-show="gData.visits == undefined">
+            <h3>Select a date range to begin</h3>
+        </div>
+
+        <div id="pnlOverview" ng-show="gData.visits != undefined">
+            <label>Total Site Visits:</label> <span>{{ gData.visits | number  }}</span>
+            <label>Avg Time on Site:</label> <span>{{ parseSeconds(gData.avgTimeOnSite) }}</span>
+            <label>Page Views Per Visit:</label> <span>{{ gData.pageviewsPerVisit | number : 2 }}</span>
+        </div>
+        <div class="clr"></div>
+        <div id="pnlDetails">
+            <fieldset ng-show="gData.goals.length > 0">
+                <legend>Are my visitors converting? <span class="note">(Goals)</span></legend>
+                <ul class="pnlGoal">
+                    <li data-ng-repeat="goal in gData.goals">
+                        <h3>{{ goal.name }}</h3>
+                        <label>Total:</label><span class="value">{{ goal.details["goal"+goal.id+"Completions"] }}</span>
+                        <div class="goalStats">
+                            <label>Started:</label>
+                            <span class="value">{{ goal.details["goal"+goal.id+"Starts"] }}</span> <br />
+                            <label>Abandoned:</label>
+                            <span class="value">{{ goal.details["goal"+goal.id+"Abandons"] }}</span> <br />
+                            <label>Abandon Rate:</label>
+                            <span class="value">{{ goal.details["goal"+goal.id+"AbandonRate"]  | number : 2 }}%</span>
+                        </div>
+                    </li>
+                </ul>
+            </fieldset>
+        </div>
+    </div>
+
+    <script>
+        // save a handle to our module so we can declare a factory for our service
+        var devLinkDemo = angular.module("DevLinkDemo", ["kendo.directives"]);
+
+        devLinkDemo.factory('gaUtil', [function () {
+            // private variables
+            var oRateLimiter = {
+                reqPerSec: 10,      // max requests allowes per sec
+                total: 0,           // total # of registered queries
+                active: 0,          // # of queries started, but not returned
+                queueLength: 0,     // # of queries in the queue
+                complete: 0,        // # of completed queries
+                startTime: 0,       // for keeping track of elapsed time
+                listeners: [],      // array of registered callback functions
+
+                // notify all our listeners that there has been an update to the queue
+                notifyListeners: function () {
+                    _.each(this.listeners, function (fnCallback) {
+                        fnCallback({
+                            total: oRateLimiter.total,
+                            active: oRateLimiter.active,
+                            complete: oRateLimiter.complete
+                        });
+                    });
+
+                    // if we have completes all requests... reset the statistics
+                    if (this.complete == this.total) {
+                        this.active =
+                        this.queueLength =
+                        this.complete =
+                        this.total =
+                        this.startTime = 0;
+                    }
+                },
+
+                // caclulate the delay before attempting the next request
+                delay: function () {
+                    var iDelay = 0; // default to no delay until proven otherwise
+
+                    // set the timer if this is the first query
+                    if (this.startTime == 0) {
+                        this.startTime = new Date().getTime();
+                    }
+                    else {
+                        // calculate elapsed time
+                        var iEllapsedMs = new Date().getTime() - this.startTime;
+
+                        // if the time is over 1 sec, reset the counter, leave delay at 0
+                        if (iEllapsedMs > 1000) {
+                            this.startTime = new Date().getTime();
+                        }
+                        else if (this.active >= this.reqPerSec) {
+                            iDelay = 1000 - iEllapsedMs; // delay the next query
+                        }
+                    }
+
+                    return iDelay;
+                },
+
+                // cleanup function for our variables
+                requestComplete: function () {
+                    this.active -= 1;   // decrement active requests
+                    this.complete += 1; // increment complete requests
+                    this.notifyListeners();
+                },
+
+                // add a request to the queue and return a promise that it will be executed
+                addRequest: function (sUrl) {
+                    var oDeferred = $.Deferred(),
+                        iDelay = this.delay();   // calculate delay for request
+
+                    // update internal vars
+                    this.queueLength += 1;
+                    this.total += 1;
+                    this.notifyListeners();
+
+                    // function to make an ajax request, called after a delay if necessary
+                    var fnCreateRequest = function (bSkipDelayCalc) {
+                        // how long do we have to wait before we can make another request
+                        var iRequestDelay = (bSkipDelayCalc) ? 0 : oRateLimiter.delay();
+
+                        // if we can send off a new request
+                        if (iRequestDelay == 0) {
+                            oRateLimiter.queueLength -= 1;  // decrement our queue length by one
+                            oRateLimiter.active += 1;       // increment the active query count
+                            oRateLimiter.notifyListeners();
+
+                            // make the request, notify on success/fail and cleanup on complete
+                            $.get(sUrl)
+                                .done(function () {
+                                    oDeferred.resolve.apply(oDeferred, arguments);
+                                })
+                                .fail(function () {
+                                    oDeferred.reject.apply(oDeferred, arguments);
+                                })
+                                .always(function () {
+                                    oRateLimiter.requestComplete();
+                                });
+                        } else {
+                            setTimeout(fnCreateRequest, iRequestDelay);  // try again after iRequestDelay
+                        }
+                    };
+
+                    // if there is a delay, call fn after it, else call immediatly
+                    if (iDelay > 0) {
+                        setTimeout(fnCreateRequest, iDelay);
+                    }
+                    else
+                        fnCreateRequest(true);
+
+                    // return the promise that the request will be made
+                    return oDeferred.promise();
+                }
+            };
+
+            // object literal (util object)
+            var gaUtil = {
+                // start date to run queries for
+                fromDate: new Date(),
+
+                // end date to run queries for
+                toDate: new Date(),
+
+                // URL creation function for constructing advanced analytics search URLs
+                createUrl: function (sMetrics, sDimenstions, sSort, sFilter) {
+                    // prevent passing 'undefined' for optional params
+                    sDimenstions = sDimenstions || '';
+                    sSort = sSort || '';
+                    sFilter = sFilter || '';
+                    return '/ga.ashx?metrics={0}&dimensions={1}&sort={2}&filter={3}&from={4}&to={5}'.format(sMetrics, sDimenstions, sSort, sFilter, this.fromDate.format('mmddyyyy'), this.toDate.format('mmddyyyy'));
+                },
+
+                // converts Googles 'columnHeaders' and 'rows' arrays into a single array of strongly typed data objects
+                processData: function (oRawData) {
+                    var arrData = [],
+                        arrHeaders = [];
+
+                    // process the header
+                    for (var i = 0; i < oRawData.columnHeaders.length; i++) {
+                        // add the name propery without the ga: clutter
+                        var oHead = { 'name': oRawData.columnHeaders[i].name.replace('ga:', '') };
+
+                        // create a custom parse function based on the dataType
+                        switch (oRawData.columnHeaders[i].dataType) {
+                            case 'INTEGER':
+                                oHead.parse = function (sVal) { return parseInt(sVal); };
+                                break;
+
+                            case 'FLOAT':
+                            case 'PERCENT':
+                            case 'TIME':
+                                oHead.parse = function (sVal) { return parseFloat(sVal); };
+                                break;
+
+                            default:
+                                oHead.parse = function (sVal) { return sVal; };
+                                break;
+                        }
+
+                        arrHeaders.push(oHead);
+                    }
+
+                    // loop through all rows, declaring readability handles to rows & col data
+                    for (i = 0; i < oRawData.rows.length; i++) {
+                        var oData = {},
+                            oRow = oRawData.rows[i];
+
+                        // parse the data with the columns parse method
+                        for (var j = 0; j < arrHeaders.length; j++) {
+                            var oCol = arrHeaders[j];
+                            oData[oCol.name] = oCol.parse(oRow[j]);
+                        }
+
+                        arrData.push(oData);
+                    }
+
+                    return arrData;
+                },
+
+                // pass the request to the rate limit library, returning a promise
+                get: function (sUrl) {
+                    return oRateLimiter.addRequest(sUrl);
+                },
+
+                // registers callback listeners for progress updates
+                progress: function (fnCallback) {
+                    oRateLimiter.listeners.push(fnCallback);
+                }
+            };
+
+            // return the customized gaUtil object
+            return gaUtil;
+        }]);
+
+        // Create The Controller for the page
+        var DemoCtrl = function ($scope, gaUtil) {
+            // expose a method to translate seconds into a more readible format
+            $scope.parseSeconds = function (fSec) {
+                if (isNaN(fSec))
+                    return '';
+
+                var min = Math.floor(fSec / 60),
+                    sec = Math.round(fSec - min * 60);
+                return '{0} min {1} sec'.format(min, sec);
+            }
+
+            // create a bucket to store all our Google data in
+            var gData = $scope.gData = {};
+
+            // set up our progress variable
+            $scope.progress = false;
+            gaUtil.progress(function (oData) {
+                if (oData.complete == 0 && oData.total > 0) {
+                    kendo.ui.progress($('#pnlPerformance'), true);
+                }
+                else if (oData.complete == oData.total) {
+                    kendo.ui.progress($('#pnlPerformance'), false);
+                }
+            });
+
+            // declare shared options for the date pickers
+            $scope.oDtOptions = {
+                change: function (e) {
+                    // if we have a from and to date, run the querys
+                    if ($scope.dtFrom && $scope.dtTo) {
+                        // update our gaUtil object to reflect the new dates
+                        gaUtil.fromDate = $scope.dtFrom;
+                        gaUtil.toDate = $scope.dtTo;
+
+                        // query for the site-wide stats (visits, avg time on site, page views per visit)
+                        var sUrl = gaUtil.createUrl('ga:visits,ga:avgTimeOnSite,ga:pageviewsPerVisit');
+
+                        // make a request, update our model
+                        gaUtil.get(sUrl).done(function (oJson) {
+                            $scope.$apply(function () {
+                                // we know there is 1 row of data (based on the question we are asking)
+                                var oData = gaUtil.processData(oJson)[0];
+                                gData.visits = oData.visits;
+                                gData.avgTimeOnSite = oData.avgTimeOnSite;
+                                gData.pageviewsPerVisit = oData.pageviewsPerVisit;
+                            });
+                        });
+
+                        // make a request, update our model
+                        gaUtil.get('/ga.ashx?goals=true').done(function (oJson) {
+                            // parse out items[{}]
+                            gData.goals = [];
+
+                            _.each(oJson.items, function (oGoal) {
+                                // query the details of all active goals
+                                if (oGoal.active) {
+                                    // save a handle to the goal data
+                                    gData.goals.push(oGoal);
+
+                                    // ask for this goal's ConversionRate, Abandons, AbandonRate, Starts & Completions
+                                    var sGoalUrl = gaUtil.createUrl('ga:goal{0}ConversionRate,ga:goal{0}Abandons,ga:goalAbandonsAll,ga:goal{0}AbandonRate,ga:goalAbandonRateAll,ga:goal{0}Starts,ga:goalStartsAll,ga:goal{0}Completions,ga:goalCompletionsAll'.format(oGoal.id));
+                                    gaUtil.get(sGoalUrl).done(function (oJsonInner) {
+                                        $scope.$apply(function () {
+                                            // we know there is 1 row of data (based on the question we are asking)
+                                            oGoal.details = gaUtil.processData(oJsonInner)[0];
+                                        });
+                                    });
+                                }
+                            });
+
+                            gData.goals.sort(function (g1, g2) {
+                                if (g1.name < g2.name)
+                                    return -1;
+                                else if (g1.name > g2.name)
+                                    return 1;
+                                else
+                                    return 0;
+                            });
+                        });
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style scoped>
+        /* Basic Styling to make this easy on the eyes */
+        body {
+            font-family: Arial, Helvetica, sans-serif;
+        }
+
+        h3 {
+            margin-bottom: 0;
+        }
+
+        .clr {
+            clear: both;
+        }
+
+        label {
+            display: inline-block;
+            text-align: right;
+        }
+
+        #pnlPerformance {
+            margin: 20px;
+            padding: 20px;
+            border: 2px solid #333;
+            border-radius: 10px;
+        }
+
+        #pnlDateSearch {
+            float: left;
+            margin: 0 30px 0 0;
+        }
+
+            #pnlDateSearch label {
+                width: 50px;
+            }
+
+        #pnlOverview {
+            float: left;
+        }
+
+            #pnlOverview label {
+                width: 160px;
+            }
+
+            #pnlOverview span {
+                display: inline-block;
+                padding: 0 30px 0 6px;
+                font-size: 30px;
+                vertical-align: middle;
+            }
+
+        #pnlDetails {
+            clear: both;
+            margin: 30px 0 0 0;
+        }
+
+        fieldset {
+            margin: 0 0 30px 0;
+            padding: 25px 5px 5px 5px;
+            position: relative;
+            border: 2px solid #c5c5c5;
+            border-radius: 5px;
+        }
+
+            fieldset legend {
+                background-color: #e9e9e9;
+                background-image: none, linear-gradient(to bottom, rgba(255, 255, 255, 0.6) 0px, rgba(255, 255, 255, 0) 100%);
+                background-position: 50% 50%;
+                border: 2px solid #c5c5c5;
+                border-radius: 5px;
+                color: #4D403A;
+                font-size: 16px;
+                padding: 4px 8px;
+                position: absolute;
+                top: -16px;
+                left: 10px;
+            }
+
+        .pnlGoal {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+        }
+
+            .pnlGoal li {
+                list-style: none;
+                margin: 0 10px 10px 10px;
+                float: left;
+                width: 260px;
+            }
+
+                .pnlGoal li label {
+                    width: 130px;
+                    margin: 10px 5px 0 0;
+                }
+
+                .pnlGoal li .value {
+                    line-height: 22px;
+                }
+
+                .pnlGoal li .goalStats .goalStats {
+                    margin-top: 10px;
+                }
+
+                .pnlGoal li .goalStats label {
+                    margin-top: 5px;
+                }
+
+                .pnlGoal li .goalStats .value {
+                    font-size: 16px;
+                    line-height: 20px;
+                }
+    </style>
+</body>
